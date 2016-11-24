@@ -5,6 +5,10 @@ var path = require('path');
 var mkdirp = require('mkdirp');
 var baseBundleDirpath = path.join(__dirname, '.karma');
 var osName = require('os-name');
+var browserMatrix = require('./.browser-matrix.json');
+
+// TO RUN IN "CI MODE" LOCALLY, execute:
+// `CI=1 SAUCE_USERNAME=<user> SAUCE_ACCESS_KEY=<key> make test-browser`
 
 module.exports = function (config) {
   var bundleDirpath;
@@ -57,9 +61,7 @@ module.exports = function (config) {
     }
   };
 
-  // see https://github.com/saucelabs/karma-sauce-example
-  // TO RUN LOCALLY, execute:
-  // `CI=1 SAUCE_USERNAME=<user> SAUCE_ACCESS_KEY=<key> make test-browser`
+  // inspired by https://github.com/saucelabs/karma-sauce-example
   var env = process.env;
   var sauceConfig;
 
@@ -86,13 +88,14 @@ module.exports = function (config) {
       console.error('Local/unknown environment detected');
       bundleDirpath = path.join(baseBundleDirpath, 'local');
       // don't need to run sauce from appveyor b/c travis does it.
-      if (!(env.SAUCE_USERNAME || env.SAUCE_ACCESS_KEY)) {
-        console.error('No SauceLabs credentials present');
-      } else {
+      if (env.SAUCE_USERNAME || env.SAUCE_ACCESS_KEY) {
         sauceConfig = {
-          build: require('os').hostname() + ' (' + Date.now() + ')'
+          build: require('os')
+            .hostname() + ' (' + Date.now() + ')'
         };
         console.error('Configured SauceLabs');
+      } else {
+        console.error('No SauceLabs credentials present');
       }
     }
     mkdirp.sync(bundleDirpath);
@@ -126,46 +129,15 @@ module.exports = function (config) {
 };
 
 function addSauceTests (cfg) {
-  cfg.reporters.push('saucelabs');
+  var browsers = process.env.MOCHA_BROWSER;
+  cfg.customLaunchers = browsers ? browsers.split(',')
+    .reduce(function (launchers, browser) {
+      browser = browser.toLowerCase();
+      launchers[browser] = browserMatrix[browser];
+      return launchers;
+    }, {}) : browserMatrix;
 
-  cfg.customLaunchers = {
-    ie8: {
-      base: 'SauceLabs',
-      browserName: 'internet explorer',
-      platform: 'Windows 7',
-      version: '8.0'
-    },
-    ie7: {
-      base: 'SauceLabs',
-      browserName: 'internet explorer',
-      platform: 'Windows XP',
-      version: '7.0'
-    },
-    chrome: {
-      base: 'SauceLabs',
-      browserName: 'chrome',
-      platform: 'Windows 8',
-      version: 'latest'
-    },
-    edge: {
-      base: 'SauceLabs',
-      browserName: 'MicrosoftEdge',
-      platform: 'Windows 10',
-      version: 'latest'
-    },
-    firefox: {
-      base: 'SauceLabs',
-      browserName: 'firefox',
-      platform: 'Windows 8.1',
-      version: 'latest'
-    },
-    safari: {
-      base: 'SauceLabs',
-      browserName: 'safari',
-      platform: 'OS X 10.11',
-      version: 'latest'
-    }
-  };
+  cfg.reporters.push('saucelabs');
 
   cfg.browsers = cfg.browsers.concat(Object.keys(cfg.customLaunchers));
 
